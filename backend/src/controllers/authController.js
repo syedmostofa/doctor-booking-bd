@@ -3,6 +3,13 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const pool = require('../db/pool');
 
+const signToken = (user) =>
+  jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
 const register = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -17,23 +24,38 @@ const register = async (req, res, next) => {
       return res.status(409).json({ error: 'Email already registered.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const password_hash = await bcrypt.hash(password, 10);
 
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password, phone, role)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, email, phone, role, created_at`,
-      [name, email, hashedPassword, phone, role]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const user = result.rows[0];
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+      const userResult = await client.query(
+        `INSERT INTO users (name, email, password_hash, phone, role)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, name, email, phone, role, created_at`,
+        [name, email, password_hash, phone || null, role]
+      );
+      const user = userResult.rows[0];
 
-    res.status(201).json({ user, token });
+      if (role === 'doctor') {
+        await client.query(
+          `INSERT INTO doctors (user_id, specialty, location)
+           VALUES ($1, '', '')`,
+          [user.id]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      const token = signToken(user);
+      res.status(201).json({ user, token });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
@@ -54,18 +76,13 @@ const login = async (req, res, next) => {
     }
 
     const user = result.rows[0];
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    const { password: _, ...safeUser } = user;
+    const token = signToken(user);
+    const { password_hash: _, ...safeUser } = user;
     res.json({ user: safeUser, token });
   } catch (err) {
     next(err);
@@ -74,14 +91,27 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    const result = await pool.query(
+    const userResult = await pool.query(
       'SELECT id, name, email, phone, role, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
-    if (result.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
-    res.json({ user: result.rows[0] });
+
+    const user = userResult.rows[0];
+
+    if (user.role === 'doctor') {
+      const doctorResult = await pool.query(
+        `SELECT id, specialty, location, chamber_address, consultation_fee,
+                bio, profile_picture_url, experience_years, created_at
+         FROM doctors WHERE user_id = $1`,
+        [user.id]
+      );
+      return res.json({ user, doctor: doctorResult.rows[0] || null });
+    }
+
+    res.json({ user });
   } catch (err) {
     next(err);
   }
