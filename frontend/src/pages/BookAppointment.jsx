@@ -1,99 +1,98 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getDoctorByIdApi, getDoctorSlotsApi } from '../api/doctorsApi';
+import { useState } from 'react';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { createAppointmentApi } from '../api/appointmentsApi';
-import CalendarPicker from '../components/CalendarPicker';
-import TimeSlotPicker from '../components/TimeSlotPicker';
-import { format } from 'date-fns';
+import { useAuth } from '../context/AuthContext';
+import { format, parseISO } from 'date-fns';
 import toast from 'react-hot-toast';
-import { CheckCircle } from 'lucide-react';
+import { CalendarDays, Clock, User, Banknote } from 'lucide-react';
+
+function formatTime(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
 
 export default function BookAppointment() {
-  const { doctorId } = useParams();
+  const { doctorId, slotId } = useParams();
   const navigate = useNavigate();
-  const [doctor, setDoctor] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const location = useLocation();
+  const { user } = useAuth();
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
-  const [slotsLoading, setSlotsLoading] = useState(false);
 
-  useEffect(() => {
-    getDoctorByIdApi(doctorId)
-      .then((res) => setDoctor(res.data.doctor ?? res.data))
-      .catch(() => toast.error('Failed to load doctor.'));
-  }, [doctorId]);
+  // Redirect unauthenticated users to login
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
-  useEffect(() => {
-    if (!selectedDate) return;
-    setSlotsLoading(true);
-    setSelectedSlot(null);
-    getDoctorSlotsApi(doctorId, format(selectedDate, 'yyyy-MM-dd'))
-      .then((res) => setSlots(res.data.slots ?? res.data))
-      .catch(() => toast.error('Failed to load slots.'))
-      .finally(() => setSlotsLoading(false));
-  }, [selectedDate, doctorId]);
+  const state = location.state ?? {};
+  const { date, slotTime, slotEndTime, doctorName, specialty, fee } = state;
 
-  const handleBook = async () => {
-    if (!selectedDate || !selectedSlot) {
-      toast.error('Please select a date and time slot.');
-      return;
-    }
+  const handleConfirm = async () => {
     setLoading(true);
     try {
-      const [hour, minute] = selectedSlot.replace(/[APM]/g, '').trim().split(':');
-      const isPM = selectedSlot.includes('PM');
-      const scheduledAt = new Date(selectedDate);
-      scheduledAt.setHours(isPM ? parseInt(hour) + 12 : parseInt(hour), parseInt(minute), 0);
-
-      await createAppointmentApi({ doctorId, scheduledAt: scheduledAt.toISOString(), notes });
+      await createAppointmentApi({ slot_id: slotId, notes });
       toast.success('Appointment booked successfully!');
       navigate('/my-appointments');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Booking failed.');
+      toast.error(err.response?.data?.error || 'Booking failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!doctor) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Book Appointment</h1>
-      <p className="text-gray-500 text-sm mb-6">with Dr. {doctor.name} &mdash; {doctor.specialty}</p>
+    <div className="max-w-lg mx-auto px-4 py-10">
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Confirm Appointment</h1>
+      <p className="text-gray-500 text-sm mb-6">Review your booking details before confirming.</p>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-        {/* Date */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Select Date</label>
-          <CalendarPicker selected={selectedDate} onChange={setSelectedDate} />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        {/* Summary */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <User size={16} className="text-teal-600 flex-shrink-0" />
+            <div>
+              <span className="text-gray-400 text-xs block">Doctor</span>
+              <span className="font-medium">Dr. {doctorName ?? '—'}</span>
+              {specialty && <span className="text-teal-600 ml-1.5 text-xs">{specialty}</span>}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <CalendarDays size={16} className="text-teal-600 flex-shrink-0" />
+            <div>
+              <span className="text-gray-400 text-xs block">Date</span>
+              <span className="font-medium">
+                {date ? format(parseISO(date), 'EEEE, dd MMMM yyyy') : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <Clock size={16} className="text-teal-600 flex-shrink-0" />
+            <div>
+              <span className="text-gray-400 text-xs block">Time</span>
+              <span className="font-medium">
+                {slotTime ? `${formatTime(slotTime)}${slotEndTime ? ` – ${formatTime(slotEndTime)}` : ''}` : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <Banknote size={16} className="text-teal-600 flex-shrink-0" />
+            <div>
+              <span className="text-gray-400 text-xs block">Consultation Fee</span>
+              <span className="font-semibold text-lg text-gray-900">৳{fee ?? '—'}</span>
+            </div>
+          </div>
         </div>
 
-        {/* Time Slots */}
-        {selectedDate && (
-          <div>
-            <label className="block text-sm font-semibold text-gray-800 mb-2">Select Time</label>
-            {slotsLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="w-6 h-6 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <TimeSlotPicker slots={slots} selected={selectedSlot} onSelect={setSelectedSlot} />
-            )}
-          </div>
-        )}
-
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Reason / Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+        <div className="border-t border-gray-100 pt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Notes <span className="text-gray-400 font-normal">(optional)</span>
+          </label>
           <textarea
             rows={3}
             value={notes}
@@ -103,22 +102,12 @@ export default function BookAppointment() {
           />
         </div>
 
-        {/* Summary */}
-        {selectedDate && selectedSlot && (
-          <div className="bg-teal-50 rounded-xl p-4 text-sm text-teal-800">
-            <p className="font-medium flex items-center gap-1.5"><CheckCircle size={15} /> Booking Summary</p>
-            <p className="mt-1 text-teal-700">
-              {format(selectedDate, 'EEEE, dd MMMM yyyy')} at {selectedSlot} &mdash; ৳{doctor.fee ?? 500}
-            </p>
-          </div>
-        )}
-
         <button
-          onClick={handleBook}
-          disabled={loading || !selectedDate || !selectedSlot}
+          onClick={handleConfirm}
+          disabled={loading}
           className="w-full bg-teal-600 text-white py-3 rounded-xl font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Booking...' : 'Confirm Appointment'}
+          {loading ? 'Confirming...' : 'Confirm Booking'}
         </button>
       </div>
     </div>

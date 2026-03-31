@@ -1,25 +1,32 @@
 import { Clock } from 'lucide-react';
 
+function formatTime(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 export default function TimeSlotPicker({ slots, selected, onSelect }) {
   if (!slots || slots.length === 0) {
     return (
       <p className="text-sm text-gray-400 text-center py-4">
-        No available slots for this date.
+        No slots available for this date.
       </p>
     );
   }
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+    <div className="flex flex-wrap gap-2">
       {slots.map((slot) => {
-        const isSelected = selected === slot.time;
-        const isDisabled = !slot.available;
+        const isSelected = selected?.id === slot.id;
+        const isDisabled = slot.is_booked;
         return (
           <button
-            key={slot.time}
+            key={slot.id}
             disabled={isDisabled}
-            onClick={() => onSelect(slot.time)}
-            className={`flex items-center justify-center gap-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors
+            onClick={() => onSelect(slot)}
+            className={`flex items-center gap-1.5 py-2 px-3 rounded-full text-sm font-medium border transition-colors
               ${isDisabled
                 ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
                 : isSelected
@@ -28,7 +35,7 @@ export default function TimeSlotPicker({ slots, selected, onSelect }) {
               }`}
           >
             <Clock size={12} />
-            {slot.time}
+            {formatTime(slot.start_time)}
           </button>
         );
       })}

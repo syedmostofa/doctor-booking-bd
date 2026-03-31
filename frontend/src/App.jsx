@@ -26,7 +26,7 @@ export default function App() {
           <Route path="/doctors" element={<DoctorSearch />} />
           <Route path="/doctors/:id" element={<DoctorProfile />} />
           <Route
-            path="/book/:doctorId"
+            path="/book/:doctorId/:slotId"
             element={
               <ProtectedRoute role="patient">
                 <BookAppointment />
