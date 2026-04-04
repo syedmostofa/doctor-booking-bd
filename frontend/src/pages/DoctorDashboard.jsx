@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getDoctorAppointmentsApi, updateAppointmentStatusApi } from '../api/appointmentsApi';
+import { Link } from 'react-router-dom';
+import { getDoctorAppointmentsApi, updateAppointmentStatusApi, cancelAppointmentApi } from '../api/appointmentsApi';
 import AppointmentCard from '../components/AppointmentCard';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, Calendar, Settings } from 'lucide-react';
 
 const TABS = ['pending', 'confirmed', 'completed', 'cancelled'];
 
@@ -16,7 +17,7 @@ export default function DoctorDashboard() {
   const load = () => {
     setLoading(true);
     getDoctorAppointmentsApi()
-      .then((res) => setAppointments(res.data.appointments ?? res.data))
+      .then((res) => setAppointments(res.data.appointments ?? res.data ?? []))
       .catch(() => toast.error('Failed to load appointments.'))
       .finally(() => setLoading(false));
   };
@@ -28,8 +29,19 @@ export default function DoctorDashboard() {
       await updateAppointmentStatusApi(id, status);
       toast.success(`Appointment ${status}.`);
       load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update status.');
+    }
+  };
+
+  const handleCancel = async (id) => {
+    if (!confirm('Cancel this appointment?')) return;
+    try {
+      await cancelAppointmentApi(id);
+      toast.success('Appointment cancelled.');
+      load();
     } catch {
-      toast.error('Failed to update status.');
+      toast.error('Failed to cancel.');
     }
   };
 
@@ -37,11 +49,27 @@ export default function DoctorDashboard() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <div className="flex items-center gap-3 mb-6">
-        <LayoutDashboard className="text-teal-600" size={24} />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Doctor Dashboard</h1>
-          <p className="text-sm text-gray-500">Welcome, Dr. {user?.name}</p>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <LayoutDashboard className="text-teal-600" size={24} />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Doctor Dashboard</h1>
+            <p className="text-sm text-gray-500">Welcome, Dr. {user?.name}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Link
+            to="/doctor/slots"
+            className="flex items-center gap-1 text-sm text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 transition-colors"
+          >
+            <Calendar size={14} /> Slots
+          </Link>
+          <Link
+            to="/doctor/edit-profile"
+            className="flex items-center gap-1 text-sm text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Settings size={14} /> Profile
+          </Link>
         </div>
       </div>
 
@@ -83,10 +111,11 @@ export default function DoctorDashboard() {
         <div className="space-y-4">
           {filtered.map((apt) => (
             <AppointmentCard
-              key={apt._id}
+              key={apt.id}
               appointment={apt}
               isDoctor
-              onStatusChange={tab === 'pending' ? handleStatusChange : null}
+              onStatusChange={handleStatusChange}
+              onCancel={(tab === 'pending' || tab === 'confirmed') ? handleCancel : null}
             />
           ))}
         </div>

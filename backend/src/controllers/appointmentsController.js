@@ -39,6 +39,25 @@ const bookAppointment = async (req, res, next) => {
 
     await client.query('UPDATE slots SET is_booked = TRUE WHERE id = $1', [slot_id]);
 
+    // Notify doctor about new booking
+    const doctorUserResult = await client.query(
+      'SELECT user_id FROM doctors WHERE id = $1', [slot.doctor_id]
+    );
+    if (doctorUserResult.rows.length > 0) {
+      await client.query(
+        `INSERT INTO notifications (user_id, type, title, message, metadata)
+         VALUES ($1, 'appointment_booked', 'New Appointment', 'A patient has booked an appointment with you.', $2)`,
+        [doctorUserResult.rows[0].user_id, JSON.stringify({ appointment_id: appointment.rows[0].id })]
+      );
+    }
+
+    // Notify patient about booking confirmation
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, metadata)
+       VALUES ($1, 'appointment_booked', 'Appointment Booked', 'Your appointment has been booked successfully. Waiting for doctor confirmation.', $2)`,
+      [req.user.id, JSON.stringify({ appointment_id: appointment.rows[0].id })]
+    );
+
     await client.query('COMMIT');
     res.status(201).json({ appointment: appointment.rows[0] });
   } catch (err) {
@@ -171,6 +190,19 @@ const cancelAppointment = async (req, res, next) => {
       [id]
     );
     await client.query('UPDATE slots SET is_booked = FALSE WHERE id = $1', [appt.slot_id]);
+
+    // Notify the other party about cancellation
+    const notifyUserId = isPatient ? appt.doctor_user_id : appt.patient_id;
+    const cancelledBy = isPatient ? 'patient' : 'doctor';
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, metadata)
+       VALUES ($1, 'appointment_cancelled', 'Appointment Cancelled', $2, $3)`,
+      [
+        notifyUserId,
+        `An appointment has been cancelled by the ${cancelledBy}.`,
+        JSON.stringify({ appointment_id: id })
+      ]
+    );
 
     await client.query('COMMIT');
     res.json({ message: 'Appointment cancelled successfully.' });

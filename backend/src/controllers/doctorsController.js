@@ -3,35 +3,57 @@ const pool = require('../db/pool');
 
 const getAllDoctors = async (req, res, next) => {
   try {
-    const { specialization, district, search } = req.query;
+    const { specialization, district, search, page = 1, limit = 12 } = req.query;
+    const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT d.id, d.specialization, d.qualification, d.experience_years,
-             d.consultation_fee, d.district, d.bio, d.available,
-             u.name, u.email, u.phone
-      FROM doctors d
-      JOIN users u ON d.user_id = u.id
-      WHERE 1=1
-    `;
+    let baseWhere = ' WHERE 1=1';
     const params = [];
 
     if (specialization) {
       params.push(specialization);
-      query += ` AND d.specialization ILIKE $${params.length}`;
+      baseWhere += ` AND d.specialization ILIKE $${params.length}`;
     }
     if (district) {
       params.push(district);
-      query += ` AND d.district ILIKE $${params.length}`;
+      baseWhere += ` AND d.district ILIKE $${params.length}`;
     }
     if (search) {
       params.push(`%${search}%`);
-      query += ` AND (u.name ILIKE $${params.length} OR d.specialization ILIKE $${params.length})`;
+      baseWhere += ` AND (u.name ILIKE $${params.length} OR d.specialization ILIKE $${params.length})`;
     }
 
-    query += ' ORDER BY u.name ASC';
+    // Count total
+    const countQuery = `SELECT COUNT(*) FROM doctors d JOIN users u ON d.user_id = u.id ${baseWhere}`;
+    const countResult = await pool.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    // Get avg ratings via subquery
+    let query = `
+      SELECT d.id, d.specialization, d.qualification, d.experience_years,
+             d.consultation_fee, d.district, d.bio, d.available,
+             u.name, u.email, u.phone,
+             COALESCE(r.avg_rating, 0) AS avg_rating,
+             COALESCE(r.total_reviews, 0) AS total_reviews
+      FROM doctors d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN (
+        SELECT doctor_id, AVG(rating)::NUMERIC(2,1) AS avg_rating, COUNT(*) AS total_reviews
+        FROM reviews GROUP BY doctor_id
+      ) r ON r.doctor_id = d.id
+      ${baseWhere}
+      ORDER BY u.name ASC
+    `;
+
+    params.push(limit);
+    query += ` LIMIT $${params.length}`;
+    params.push(offset);
+    query += ` OFFSET $${params.length}`;
 
     const result = await pool.query(query, params);
-    res.json({ doctors: result.rows });
+    res.json({
+      doctors: result.rows,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / limit) }
+    });
   } catch (err) {
     next(err);
   }

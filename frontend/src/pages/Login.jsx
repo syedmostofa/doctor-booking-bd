@@ -18,7 +18,7 @@ export default function Login() {
     try {
       const user = await login(form);
       toast.success(`Welcome back, ${user.name?.split(' ')[0]}!`);
-      navigate(user.role === 'doctor' ? '/doctor/dashboard' : '/');
+      navigate(user.role === 'doctor' ? '/doctor/dashboard' : user.role === 'admin' ? '/admin' : '/');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
@@ -61,6 +61,11 @@ export default function Login() {
               placeholder="••••••••"
               className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
             />
+          </div>
+          <div className="flex justify-end">
+            <Link to="/forgot-password" className="text-xs text-teal-600 hover:underline">
+              Forgot password?
+            </Link>
           </div>
           <button
             type="submit"
