@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPin, Clock, DollarSign } from 'lucide-react';
+import { MapPin, Clock, Star } from 'lucide-react';
 
 const PLACEHOLDER_AVATAR = (name) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? 'Doctor')}&background=ccfbf1&color=0f766e&size=128`;
@@ -21,18 +21,24 @@ export default function DoctorCard({ doctor }) {
             Dr. {doctor.name}
           </h3>
           <p className="text-teal-600 text-sm font-medium mt-0.5">
-            {doctor.specialty}
+            {doctor.specialization || doctor.specialty}
           </p>
 
           <div className="mt-2 flex flex-col gap-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <MapPin size={12} className="flex-shrink-0" />
-              <span className="truncate">{doctor.location || 'Bangladesh'}</span>
+              <span className="truncate">{doctor.district || doctor.location || 'Bangladesh'}</span>
             </span>
             <span className="flex items-center gap-1">
               <Clock size={12} className="flex-shrink-0" />
-              {doctor.experience_years ?? doctor.experience ?? '—'} yrs experience
+              {doctor.experience_years ?? '—'} yrs experience
             </span>
+            {(doctor.avg_rating > 0 || doctor.total_reviews > 0) && (
+              <span className="flex items-center gap-1">
+                <Star size={12} className="text-yellow-400 fill-yellow-400 flex-shrink-0" />
+                {doctor.avg_rating || '—'} ({doctor.total_reviews} reviews)
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -40,12 +46,12 @@ export default function DoctorCard({ doctor }) {
       <div className="px-5 pb-5 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-800 flex items-center gap-1">
           <span className="text-base">৳</span>
-          {doctor.consultation_fee ?? doctor.fee ?? '—'}
+          {doctor.consultation_fee ?? '—'}
           <span className="font-normal text-gray-400 text-xs"> / visit</span>
         </span>
 
         <Link
-          to={`/doctors/${doctor._id}`}
+          to={`/doctors/${doctor.id}`}
           className="bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700 active:scale-95 transition-all"
         >
           Book Appointment

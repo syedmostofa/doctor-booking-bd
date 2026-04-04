@@ -5,6 +5,7 @@ const {
   getMyAppointments,
   getAppointmentById,
   cancelAppointment,
+  updateAppointmentStatus,
 } = require('../controllers/appointmentsController');
 const { authenticate, authorizeRoles } = require('../middleware/authMiddleware');
 
@@ -30,5 +31,14 @@ router.get('/:id', authenticate, getAppointmentById);
 
 // PATCH /api/v1/appointments/:id/cancel
 router.patch('/:id/cancel', authenticate, cancelAppointment);
+
+// PATCH /api/v1/appointments/:id/status
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorizeRoles('doctor', 'admin'),
+  [body('status').isIn(['confirmed', 'completed']).withMessage('Status must be confirmed or completed.')],
+  updateAppointmentStatus
+);
 
 module.exports = router;

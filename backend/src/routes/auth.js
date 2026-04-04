@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login, getMe } = require('../controllers/authController');
+const { register, login, getMe, refreshToken, forgotPassword, resetPassword, updateProfile, changePassword } = require('../controllers/authController');
 const { authenticate } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -32,5 +32,47 @@ router.post(
 
 // GET /api/v1/auth/me
 router.get('/me', authenticate, getMe);
+
+// POST /api/v1/auth/refresh
+router.post('/refresh', authenticate, refreshToken);
+
+// POST /api/v1/auth/forgot-password
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().withMessage('Valid email is required.')],
+  forgotPassword
+);
+
+// POST /api/v1/auth/reset-password
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty().withMessage('Reset token is required.'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
+  ],
+  resetPassword
+);
+
+// PATCH /api/v1/auth/profile
+router.patch(
+  '/profile',
+  authenticate,
+  [
+    body('name').optional().trim().notEmpty().withMessage('Name cannot be empty.'),
+    body('phone').optional().matches(/^(\+880|880|0)?1[3-9]\d{8}$/).withMessage('Valid Bangladeshi phone number is required.'),
+  ],
+  updateProfile
+);
+
+// POST /api/v1/auth/change-password
+router.post(
+  '/change-password',
+  authenticate,
+  [
+    body('current_password').notEmpty().withMessage('Current password is required.'),
+    body('new_password').isLength({ min: 6 }).withMessage('New password must be at least 6 characters.'),
+  ],
+  changePassword
+);
 
 module.exports = router;

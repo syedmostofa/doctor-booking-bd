@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getMyAppointmentsApi, cancelAppointmentApi } from '../api/appointmentsApi';
 import AppointmentCard from '../components/AppointmentCard';
 import toast from 'react-hot-toast';
 import { CalendarX } from 'lucide-react';
 
 export default function MyAppointments() {
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
     getMyAppointmentsApi()
-      .then((res) => setAppointments(res.data.appointments ?? res.data))
+      .then((res) => setAppointments(res.data.appointments ?? res.data ?? []))
       .catch(() => toast.error('Failed to load appointments.'))
       .finally(() => setLoading(false));
   };
@@ -29,6 +31,15 @@ export default function MyAppointments() {
     }
   };
 
+  const handlePay = (appointment) => {
+    navigate(`/payment/${appointment.id}`, {
+      state: {
+        fee: appointment.consultation_fee,
+        doctorName: appointment.doctor_name,
+      },
+    });
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">My Appointments</h1>
@@ -44,7 +55,12 @@ export default function MyAppointments() {
       ) : (
         <div className="space-y-4">
           {appointments.map((apt) => (
-            <AppointmentCard key={apt._id} appointment={apt} onCancel={handleCancel} />
+            <AppointmentCard
+              key={apt.id}
+              appointment={apt}
+              onCancel={handleCancel}
+              onPay={handlePay}
+            />
           ))}
         </div>
       )}
