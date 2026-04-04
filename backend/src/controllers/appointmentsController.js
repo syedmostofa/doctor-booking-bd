@@ -182,4 +182,129 @@ const cancelAppointment = async (req, res, next) => {
   }
 };
 
-module.exports = { bookAppointment, getMyAppointments, getAppointmentById, cancelAppointment };
+const updateAppointmentStatus = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['confirmed', 'completed'].includes(status)) {
+      return res.status(400).json({ error: 'Status must be confirmed or completed.' });
+    }
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `SELECT a.id, a.status, a.patient_id, a.slot_id, d.user_id AS doctor_user_id, d.id AS doctor_id
+       FROM appointments a
+       JOIN doctors d ON a.doctor_id = d.id
+       WHERE a.id = $1
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Appointment not found.' });
+    }
+
+    const appt = result.rows[0];
+    const isDoctor = req.user.id === appt.doctor_user_id;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isDoctor && !isAdmin) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Only the doctor or admin can update appointment status.' });
+    }
+
+    if (appt.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Cannot update a cancelled appointment.' });
+    }
+
+    if (status === 'confirmed' && appt.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Only pending appointments can be confirmed.' });
+    }
+
+    if (status === 'completed' && appt.status !== 'confirmed') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Only confirmed appointments can be completed.' });
+    }
+
+    await client.query(
+      `UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2`,
+      [status, id]
+    );
+
+    // Create notification for patient
+    const notifTitle = status === 'confirmed' ? 'Appointment Confirmed' : 'Appointment Completed';
+    const notifMessage = status === 'confirmed'
+      ? 'Your appointment has been confirmed by the doctor.'
+      : 'Your appointment has been marked as completed.';
+
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, metadata)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [appt.patient_id, `appointment_${status}`, notifTitle, notifMessage, JSON.stringify({ appointment_id: id })]
+    );
+
+    await client.query('COMMIT');
+    res.json({ message: `Appointment ${status} successfully.` });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+const getAllAppointments = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required.' });
+    }
+
+    const { page = 1, limit = 20, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT a.id, a.status, a.notes, a.created_at,
+             s.slot_date, s.start_time, s.end_time,
+             doc_user.name AS doctor_name, d.specialization,
+             pat_user.name AS patient_name, pat_user.email AS patient_email
+      FROM appointments a
+      JOIN slots s ON a.slot_id = s.id
+      JOIN doctors d ON a.doctor_id = d.id
+      JOIN users doc_user ON d.user_id = doc_user.id
+      JOIN users pat_user ON a.patient_id = pat_user.id
+    `;
+    const params = [];
+
+    if (status) {
+      params.push(status);
+      query += ` WHERE a.status = $${params.length}`;
+    }
+
+    // Count total
+    const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) FROM');
+    const countResult = await pool.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    query += ' ORDER BY a.created_at DESC';
+    params.push(limit);
+    query += ` LIMIT $${params.length}`;
+    params.push(offset);
+    query += ` OFFSET $${params.length}`;
+
+    const result = await pool.query(query, params);
+    res.json({
+      appointments: result.rows,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { bookAppointment, getMyAppointments, getAppointmentById, cancelAppointment, updateAppointmentStatus, getAllAppointments };
