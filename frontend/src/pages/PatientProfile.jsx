@@ -91,7 +91,7 @@ export default function PatientProfile() {
         </div>
 
         <div className="text-xs text-gray-400">
-          Role: <span className="capitalize font-medium">{user?.role}</span> &middot; Joined: {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '\u2014'}
+          Role: <span className="capitalize font-medium">{user?.role}</span> &middot; Joined: {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
         </div>
 
         <button

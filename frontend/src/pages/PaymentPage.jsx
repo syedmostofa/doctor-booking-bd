@@ -47,7 +47,7 @@ export default function PaymentPage() {
         {/* Fee display */}
         <div className="text-center py-3 bg-gray-50 rounded-xl">
           <p className="text-xs text-gray-400">Amount Due</p>
-          <p className="text-3xl font-bold text-gray-900">\u09F3{state.fee || '\u2014'}</p>
+          <p className="text-3xl font-bold text-gray-900">৳{state.fee || '—'}</p>
           {state.doctorName && (
             <p className="text-sm text-gray-500 mt-1">Dr. {state.doctorName}</p>
           )}
@@ -90,7 +90,7 @@ export default function PaymentPage() {
           disabled={loading}
           className="w-full bg-teal-600 text-white py-3 rounded-xl font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Processing...' : method === 'cash' ? 'Confirm Cash Payment' : `Pay \u09F3${state.fee || '\u2014'}`}
+          {loading ? 'Processing...' : method === 'cash' ? 'Confirm Cash Payment' : `Pay ৳${state.fee || '—'}`}
         </button>
       </div>
     </div>
